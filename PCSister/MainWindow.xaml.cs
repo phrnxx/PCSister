@@ -35,7 +35,10 @@ namespace PCSister
 
         private PetAnimator animator;
         private DispatcherTimer gameTimer;
-        private PerformanceCounter cpuCounter;
+        private PerformanceCounter? cpuCounter;
+
+        // Явно используем NotifyIcon из Forms
+        private System.Windows.Forms.NotifyIcon? trayIcon;
 
         private string currentState = Settings.StateIdle;
         private int currentFrame = 0;
@@ -73,33 +76,84 @@ namespace PCSister
             gameTimer = new DispatcherTimer(DispatcherPriority.Render);
             gameTimer.Interval = TimeSpan.FromMilliseconds(1000.0 / Settings.FPS);
             gameTimer.Tick += GameLoop;
+
+            SetupTrayIcon();
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            this.Left = 0;
-            this.Top = 0;
-            this.Width = SystemParameters.PrimaryScreenWidth;
-            this.Height = SystemParameters.PrimaryScreenHeight;
+            // Растягиваем на все мониторы
+            this.Left = SystemParameters.VirtualScreenLeft;
+            this.Top = SystemParameters.VirtualScreenTop;
+            this.Width = SystemParameters.VirtualScreenWidth;
+            this.Height = SystemParameters.VirtualScreenHeight;
 
-            petX = this.Width / 2;
+            petX = -SystemParameters.VirtualScreenLeft + (SystemParameters.PrimaryScreenWidth / 2);
 
             double petHeight = Settings.SpriteSize * Settings.Scale;
 
             IntPtr taskbarHwnd = FindWindow("Shell_TrayWnd", null);
             if (taskbarHwnd != IntPtr.Zero && GetWindowRect(taskbarHwnd, out RECT taskbarRect))
             {
-                floorY = taskbarRect.Top - petHeight + 105;
+                floorY = (taskbarRect.Top - SystemParameters.VirtualScreenTop) - petHeight + 105;
             }
             else
             {
-                floorY = SystemParameters.PrimaryScreenHeight - petHeight;
+                floorY = (SystemParameters.PrimaryScreenHeight - SystemParameters.VirtualScreenTop) - petHeight;
             }
 
             petY = floorY;
             targetX = petX;
 
             gameTimer.Start();
+        }
+
+        private void SetupTrayIcon()
+        {
+            trayIcon = new System.Windows.Forms.NotifyIcon();
+
+            try
+            {
+                // Явно указываем System.Drawing.Icon
+                trayIcon.Icon = System.Drawing.Icon.ExtractAssociatedIcon(System.Reflection.Assembly.GetExecutingAssembly().Location);
+            }
+            catch
+            {
+                trayIcon.Icon = System.Drawing.SystemIcons.Application;
+            }
+
+            trayIcon.Text = "PCSister";
+            trayIcon.Visible = true;
+
+            var contextMenu = new System.Windows.Forms.ContextMenuStrip();
+
+            var focusItem = new System.Windows.Forms.ToolStripMenuItem("Режим фокусу: ВИМК");
+            focusItem.Click += (s, e) =>
+            {
+                isFocusMode = !isFocusMode;
+                focusItem.Text = isFocusMode ? "Режим фокусу: УВІМК" : "Режим фокусу: ВИМК";
+                ShowText(isFocusMode ? "Режим фокусу активовано!" : "Режим фокусу вимкнено.", 5);
+            };
+            contextMenu.Items.Add(focusItem);
+
+            contextMenu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
+
+            var exitItem = new System.Windows.Forms.ToolStripMenuItem("Вихід");
+            // Явно указываем System.Windows.Application
+            exitItem.Click += (s, e) => System.Windows.Application.Current.Shutdown();
+            contextMenu.Items.Add(exitItem);
+
+            trayIcon.ContextMenuStrip = contextMenu;
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            if (trayIcon != null)
+            {
+                trayIcon.Visible = false;
+                trayIcon.Dispose();
+            }
+            base.OnClosed(e);
         }
 
         private void GameLoop(object sender, EventArgs e)
@@ -112,30 +166,21 @@ namespace PCSister
 
         private void UpdateLogic()
         {
-            // Гравітація
             if (petY < floorY) petY += 6;
             if (petY > floorY) petY = floorY;
 
-            // Стани з таймером
-            if (currentState == Settings.StateHurt ||
-                currentState == Settings.StateDead ||
-                currentState == Settings.StateJump)
+            if (currentState == Settings.StateHurt || currentState == Settings.StateDead || currentState == Settings.StateJump)
             {
                 stateTimer--;
                 if (stateTimer <= 0) SetState(Settings.StateIdle);
             }
-            else if (currentState == Settings.StateIdle ||
-                     currentState == Settings.StateIdle2)
+            else if (currentState == Settings.StateIdle || currentState == Settings.StateIdle2)
             {
-                // Чередуем Afk и Afk2 по таймеру
                 idleVersionTimer++;
                 if (idleVersionTimer >= IdleVersionSwitchTime)
                 {
                     idleVersionTimer = 0;
-                    idleVersion = (idleVersion == Settings.StateIdle)
-                        ? Settings.StateIdle2
-                        : Settings.StateIdle;
-
+                    idleVersion = (idleVersion == Settings.StateIdle) ? Settings.StateIdle2 : Settings.StateIdle;
                     currentState = idleVersion;
                     currentFrame = 0;
                     frameTimer = 0;
@@ -162,13 +207,9 @@ namespace PCSister
                 }
             }
 
-            // Рух
             if (currentState == Settings.StateWalk || currentState == Settings.StateRun)
             {
-                double speed = currentState == Settings.StateRun
-                    ? Settings.SPEED_RUN
-                    : Settings.SPEED_WALK;
-
+                double speed = currentState == Settings.StateRun ? Settings.SPEED_RUN : Settings.SPEED_WALK;
                 double dx = targetX - petX;
 
                 if (Math.Abs(dx) > speed)
@@ -192,7 +233,6 @@ namespace PCSister
                 }
             }
 
-            // Межі екрану
             if (petX < 0) petX = 0;
             if (petX > this.Width - (Settings.SpriteSize * Settings.Scale))
                 petX = this.Width - (Settings.SpriteSize * Settings.Scale);
@@ -201,11 +241,7 @@ namespace PCSister
         private void UpdateAnimation()
         {
             frameTimer++;
-
-            int animDelay = (currentState == Settings.StateRun || currentState == Settings.StateJump)
-                ? Settings.AnimDelayFast
-                : Settings.AnimDelaySlow;
-
+            int animDelay = (currentState == Settings.StateRun || currentState == Settings.StateJump) ? Settings.AnimDelayFast : Settings.AnimDelaySlow;
             animDelay = Math.Max(1, animDelay);
 
             if (frameTimer >= animDelay)
@@ -236,9 +272,10 @@ namespace PCSister
                     }
                 }
 
-                if (Clipboard.ContainsText())
+                // Явно указываем System.Windows.Clipboard
+                if (System.Windows.Clipboard.ContainsText())
                 {
-                    string cb = Clipboard.GetText().ToLower();
+                    string cb = System.Windows.Clipboard.GetText().ToLower();
                     if (cb != lastClipboard && !string.IsNullOrWhiteSpace(cb))
                     {
                         lastClipboard = cb;
@@ -340,16 +377,7 @@ namespace PCSister
             ShowText("Ой! Не лякай мене так!", 5);
         }
 
-        private void MenuFocus_Click(object sender, RoutedEventArgs e)
-        {
-            isFocusMode = !isFocusMode;
-            MenuFocus.Header = isFocusMode ? "Режим фокусу: УВІМК" : "Режим фокусу: ВИМК";
-            ShowText(isFocusMode ? "Режим фокусу активовано!" : "Режим фокусу вимкнено.", 5);
-        }
-
-        private void MenuExit_Click(object sender, RoutedEventArgs e)
-        {
-            Application.Current.Shutdown();
-        }
+        private void MenuFocus_Click(object sender, RoutedEventArgs e) { }
+        private void MenuExit_Click(object sender, RoutedEventArgs e) { }
     }
 }

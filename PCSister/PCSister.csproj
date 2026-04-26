@@ -6,6 +6,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms> 
+    <ApplicationIcon>ico.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,6 +19,10 @@
     <None Remove="Assets\Jump.png" />
     <None Remove="Assets\Run.png" />
     <None Remove="Assets\Walk.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="ico.ico" />
   </ItemGroup>
 
   <ItemGroup>

@@ -59,7 +59,7 @@ namespace PCSister.Core
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"Стан: {state}\nФайл: {fileName}\nURI: {uri}\n\nПомилка: {ex.Message}", "Помилка завантаження спрайту");
+                    System.Windows.MessageBox.Show($"Стан: {state}\nФайл: {fileName}\nURI: {uri}\n\nПомилка: {ex.Message}", "Помилка завантаження спрайту");
                 }
             }
         }
